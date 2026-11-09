@@ -1,21 +1,3 @@
-streamlit
-openai
-serpapi
-pydub
-audioop-lts
-```
-
-**packages.txt**
-```txt
-ffmpeg
-```
-
-**2. Replace your `app.py` with the safer version below**  
-(I moved heavy imports and added basic error protection so the app can at least start.)
-
-### Safer `app.py` (recommended)
-
-```python
 import streamlit as st
 import io
 
