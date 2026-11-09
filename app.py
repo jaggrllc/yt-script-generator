@@ -1,8 +1,22 @@
+streamlit
+openai
+serpapi
+pydub
+audioop-lts
+```
+
+**packages.txt**
+```txt
+ffmpeg
+```
+
+**2. Replace your `app.py` with the safer version below**  
+(I moved heavy imports and added basic error protection so the app can at least start.)
+
+### Safer `app.py` (recommended)
+
+```python
 import streamlit as st
-from openai import OpenAI
-import serpapi
-from pydub import AudioSegment
-from pydub.effects import normalize, compress_dynamic_range
 import io
 
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
@@ -26,10 +40,9 @@ with st.sidebar:
     if st.button("🗑️ Clear Video Script Content from Session (Privacy)", type="secondary", use_container_width=True):
         st.session_state.generated_script = ""
         st.session_state.voiceover_audio = None
-        if "fact_check" in st.session_state:
-            del st.session_state.fact_check
-        if "research" in st.session_state:
-            del st.session_state.research
+        for key in ["fact_check", "research"]:
+            if key in st.session_state:
+                del st.session_state[key]
         st.success("Session content cleared for privacy.")
         st.rerun()
 
@@ -50,11 +63,25 @@ with col3:
 
 generate_btn = st.button("🚀 Generate & Proofread Script", type="primary", use_container_width=True)
 
-# ── Functions ──────────────────────────────────────────────────────
+# ── Lazy imports & functions ───────────────────────────────────────
+def get_openai():
+    from openai import OpenAI
+    return OpenAI
+
+def get_serpapi():
+    import serpapi
+    return serpapi
+
+def get_audio_tools():
+    from pydub import AudioSegment
+    from pydub.effects import normalize, compress_dynamic_range
+    return AudioSegment, normalize, compress_dynamic_range
+
 def search_facts(query: str, api_key: str) -> str:
     if not api_key:
         return "Research disabled or no SerpAPI key."
     try:
+        serpapi = get_serpapi()
         client = serpapi.Client(api_key=api_key)
         lower = query.lower()
         search_query = query
@@ -83,7 +110,7 @@ def research_is_weak(research: str) -> bool:
     weak = ["No strong search results", "SerpAPI error", "Research disabled", "no SerpAPI key"]
     return any(p in research for p in weak) or len(research.strip()) < 250
 
-def generate_script(proposed_text: str, research: str, openai_client: OpenAI) -> str:
+def generate_script(proposed_text: str, research: str, openai_client) -> str:
     prompt = f"""You are a careful YouTube scriptwriter who prioritizes accuracy and clarity.
 
 User request:
@@ -110,7 +137,7 @@ Return only the final spoken script text."""
     )
     return response.choices[0].message.content.strip()
 
-def proofread_script(script: str, research: str, openai_client: OpenAI) -> str:
+def proofread_script(script: str, research: str, openai_client) -> str:
     prompt = f"""Strict fact-check the following script against the research.
 
 Script:
@@ -132,6 +159,7 @@ Also note any obvious repetitions."""
     return response.choices[0].message.content.strip()
 
 def process_audio(audio_bytes: bytes, style: str) -> bytes:
+    AudioSegment, normalize, compress_dynamic_range = get_audio_tools()
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
     
     if style == "Classic Trailer":
@@ -150,7 +178,7 @@ def process_audio(audio_bytes: bytes, style: str) -> bytes:
     audio.export(buffer, format="mp3", bitrate="192k")
     return buffer.getvalue()
 
-def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str, style: str, narrator_name: str, channel_name: str, include_start_intro: bool, include_end_intro: bool) -> bytes:
+def generate_tts(text: str, openai_client, voice: str, tts_model: str, style: str, narrator_name: str, channel_name: str, include_start_intro: bool, include_end_intro: bool) -> bytes:
     instructions = None
     if tts_model == "gpt-4o-mini-tts":
         intro_parts = []
@@ -164,7 +192,6 @@ def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str, s
             intro_parts.append(f"At the very end of the recording, after the main content is finished, introduce yourself once more with the exact phrase 'I'm {narrator_name}{channel_part}.' Do this only once at the end and nowhere else.")
         
         name_intro = " ".join(intro_parts)
-        
         base_instruction = "Do not repeat sentences or facts. Do not introduce yourself except where specifically instructed."
         
         if style == "News Narrator":
@@ -202,6 +229,7 @@ if generate_btn:
     else:
         with st.spinner("Researching and generating..."):
             try:
+                OpenAI = get_openai()
                 client = OpenAI(api_key=openai_key)
                 research = "Research disabled."
                 if use_research and serpapi_key:
@@ -229,7 +257,6 @@ if generate_btn:
             except Exception as e:
                 st.error(str(e))
 
-# Show previously generated content if it exists in session (until cleared)
 if st.session_state.generated_script and not generate_btn:
     st.subheader("Generated Script")
     st.text_area("Script", value=st.session_state.generated_script, height=400, key="script_display_persistent")
@@ -264,14 +291,12 @@ if st.session_state.generated_script:
         "Custom Narrator Name",
         placeholder="e.g. Alex Rivera",
         disabled=not (include_start_intro or include_end_intro),
-        help="Used only if one or both intro checkboxes are enabled."
     )
     
     channel_name = st.text_input(
         "Custom YouTube Channel Name (optional)",
         placeholder="e.g. Aviation Insights",
         disabled=not (include_start_intro or include_end_intro),
-        help="If provided, the intro will say 'I'm [Name] from [Channel Name].'"
     )
     
     st.markdown("#### Preview Voice")
@@ -280,6 +305,7 @@ if st.session_state.generated_script:
     if st.button("▶️ Preview Selected Voice", use_container_width=True):
         with st.spinner("Generating preview..."):
             try:
+                OpenAI = get_openai()
                 client = OpenAI(api_key=openai_key)
                 audio = generate_tts(preview_text, client, voice, tts_model, voice_style, narrator_name, channel_name, include_start_intro, include_end_intro)
                 st.audio(audio, format="audio/mp3")
@@ -290,6 +316,7 @@ if st.session_state.generated_script:
     if st.button("🔊 Generate Full Voiceover MP3", type="primary", use_container_width=True):
         with st.spinner("Creating and processing voiceover..."):
             try:
+                OpenAI = get_openai()
                 client = OpenAI(api_key=openai_key)
                 audio = generate_tts(st.session_state.generated_script, client, voice, tts_model, voice_style, narrator_name, channel_name, include_start_intro, include_end_intro)
                 st.session_state.voiceover_audio = audio
@@ -308,4 +335,4 @@ if st.session_state.generated_script:
         )
 
 st.markdown("---")
-st.caption("Use the Clear button in the sidebar to remove generated script and audio from the current session.")
+st.caption("If the app still fails to start, check the Streamlit Cloud logs for the exact error.")
