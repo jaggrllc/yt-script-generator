@@ -8,7 +8,7 @@ import io
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("News Narrator / Classic Trailer styles • Custom name intro • Auto normalize")
+st.caption("Start + End intro control • Channel name support")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -73,7 +73,7 @@ def research_is_weak(research: str) -> bool:
     return any(p in research for p in weak) or len(research.strip()) < 250
 
 def generate_script(proposed_text: str, research: str, openai_client: OpenAI) -> str:
-    prompt = f"""You are a careful YouTube scriptwriter who prioritizes accuracy.
+    prompt = f"""You are a careful YouTube scriptwriter who prioritizes accuracy and clarity.
 
 User request:
 {proposed_text}
@@ -86,9 +86,12 @@ Research (may be empty):
 {research}
 
 CRITICAL RULES:
-- Prefer facts that appear in the research above.
-- Do NOT invent unsupported details.
-- Write ONLY the spoken script. No director’s directions, stage directions, or production notes.
+- Prefer facts that appear in the research above. Do not invent unsupported details.
+- Do NOT repeat the same facts, details, or sentences. Each piece of information should appear only once.
+- Write a clear, linear script that moves forward without looping or restating earlier points.
+- Write ONLY the spoken script that a narrator would say. No director’s directions, stage directions, production notes, or bracketed text.
+- Do not include any self-introduction unless the user specifically requests it in the topic.
+
 Return only the final spoken script text."""
     response = openai_client.chat.completions.create(
         model=model, temperature=temperature,
@@ -109,7 +112,8 @@ Provide:
 1. Unverified claims
 2. Suggested fixes
 3. Accuracy rating (High/Medium/Low)
-4. Publish recommendation"""
+4. Publish recommendation
+Also note any obvious repetitions."""
     response = openai_client.chat.completions.create(
         model=model, temperature=0.1,
         messages=[{"role": "user", "content": prompt}]
@@ -117,7 +121,6 @@ Provide:
     return response.choices[0].message.content.strip()
 
 def process_audio(audio_bytes: bytes, style: str) -> bytes:
-    """Apply pitch shift (Classic Trailer) + light processing + always normalize."""
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
     
     if style == "Classic Trailer":
@@ -136,17 +139,27 @@ def process_audio(audio_bytes: bytes, style: str) -> bytes:
     audio.export(buffer, format="mp3", bitrate="192k")
     return buffer.getvalue()
 
-def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str, style: str, narrator_name: str) -> bytes:
+def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str, style: str, narrator_name: str, channel_name: str, include_start_intro: bool, include_end_intro: bool) -> bytes:
     instructions = None
     if tts_model == "gpt-4o-mini-tts":
-        name_intro = ""
-        if narrator_name.strip():
-            name_intro = f" At the very beginning, briefly introduce yourself by saying something like 'I'm {narrator_name}.' Then continue with the script."
+        intro_parts = []
+        
+        if include_start_intro and narrator_name.strip():
+            channel_part = f" from {channel_name}" if channel_name.strip() else ""
+            intro_parts.append(f"Start the recording by briefly introducing yourself once with the exact phrase 'I'm {narrator_name}{channel_part}.' After that single introduction, never introduce yourself or say your name again until the very end.")
+        
+        if include_end_intro and narrator_name.strip():
+            channel_part = f" from {channel_name}" if channel_name.strip() else ""
+            intro_parts.append(f"At the very end of the recording, after the main content is finished, introduce yourself once more with the exact phrase 'I'm {narrator_name}{channel_part}.' Do this only once at the end and nowhere else.")
+        
+        name_intro = " ".join(intro_parts)
+        
+        base_instruction = "Do not repeat sentences or facts. Do not introduce yourself except where specifically instructed."
         
         if style == "News Narrator":
-            instructions = f"Speak in a clear, professional, neutral news-anchor style. Moderate pace, authoritative but calm and natural.{name_intro}"
+            instructions = f"Speak in a clear, professional, neutral news-anchor style. Moderate pace, authoritative but calm and natural. {base_instruction} {name_intro}"
         elif style == "Classic Trailer":
-            instructions = f"Speak in a deep, dramatic, cinematic movie-trailer narrator style. Low, resonant, powerful delivery with deliberate pacing.{name_intro}"
+            instructions = f"Speak in a deep, dramatic, cinematic movie-trailer narrator style. Low, resonant, powerful delivery with deliberate pacing. {base_instruction} {name_intro}"
     
     max_chars = 4000
     chunks = [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
@@ -219,10 +232,22 @@ if st.session_state.generated_script:
     with col3:
         voice_style = st.selectbox("Voice Style", ["News Narrator", "Classic Trailer"], index=0)
     
+    st.markdown("**Narrator Introduction Options**")
+    include_start_intro = st.checkbox("Include introduction at the start", value=False)
+    include_end_intro = st.checkbox("Include introduction at the very end", value=False)
+    
     narrator_name = st.text_input(
-        "Custom Narrator Name (optional)",
-        placeholder="e.g. Alex Rivera, Captain James, or leave blank",
-        help="If filled, the voice will introduce itself by this name at the start (works best with gpt-4o-mini-tts)."
+        "Custom Narrator Name",
+        placeholder="e.g. Alex Rivera",
+        disabled=not (include_start_intro or include_end_intro),
+        help="Used only if one or both intro checkboxes are enabled."
+    )
+    
+    channel_name = st.text_input(
+        "Custom YouTube Channel Name (optional)",
+        placeholder="e.g. Aviation Insights",
+        disabled=not (include_start_intro or include_end_intro),
+        help="If provided, the intro will say 'I'm [Name] from [Channel Name].'"
     )
     
     st.markdown("#### Preview Voice")
@@ -232,7 +257,7 @@ if st.session_state.generated_script:
         with st.spinner("Generating preview..."):
             try:
                 client = OpenAI(api_key=openai_key)
-                audio = generate_tts(preview_text, client, voice, tts_model, voice_style, narrator_name)
+                audio = generate_tts(preview_text, client, voice, tts_model, voice_style, narrator_name, channel_name, include_start_intro, include_end_intro)
                 st.audio(audio, format="audio/mp3")
             except Exception as e:
                 st.error(str(e))
@@ -242,7 +267,7 @@ if st.session_state.generated_script:
         with st.spinner("Creating and processing voiceover..."):
             try:
                 client = OpenAI(api_key=openai_key)
-                audio = generate_tts(st.session_state.generated_script, client, voice, tts_model, voice_style, narrator_name)
+                audio = generate_tts(st.session_state.generated_script, client, voice, tts_model, voice_style, narrator_name, channel_name, include_start_intro, include_end_intro)
                 st.session_state.voiceover_audio = audio
                 st.success("Voiceover generated, processed, and normalized!")
                 st.audio(audio, format="audio/mp3")
@@ -259,4 +284,4 @@ if st.session_state.generated_script:
         )
 
 st.markdown("---")
-st.caption("Enter a custom narrator name to have the voice introduce itself. All audio is normalized. Classic Trailer style applies a deeper pitch.")
+st.caption("Optional channel name is included in start and/or end introductions when enabled.")
