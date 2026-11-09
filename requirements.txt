@@ -1,3 +1,5 @@
 streamlit>=1.39.0
 openai>=1.50.0
 serpapi>=1.0.0
+pydub
+ffmpeg-python
