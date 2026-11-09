@@ -184,7 +184,7 @@ if generate_btn:
                 fact_check = proofread_script(generated, research, client)
                 
                 st.session_state.generated_script = generated
-                st.session_state.voiceover_audio = None  # Clear previous audio
+                st.session_state.voiceover_audio = None
                 st.success("Script generated and checked!")
                 
                 st.subheader("Generated Script")
@@ -206,9 +206,22 @@ if st.session_state.generated_script:
     
     col1, col2 = st.columns(2)
     with col1:
-        tts_model = st.selectbox("TTS Model", ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"], index=1)
+        tts_model = st.selectbox("TTS Model", ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"], index=2)
     with col2:
-        voice = st.selectbox("Voice", ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "coral", "sage"], index=4)
+        # Dynamic voice list: extra high-quality voices only on gpt-4o-mini-tts
+        base_voices = ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "coral", "sage"]
+        extra_voices = ["ballad", "verse", "marin", "cedar"]
+        
+        if tts_model == "gpt-4o-mini-tts":
+            available_voices = base_voices + extra_voices
+        else:
+            available_voices = base_voices
+        
+        voice = st.selectbox(
+            "Voice", 
+            available_voices, 
+            index=available_voices.index("nova") if "nova" in available_voices else 0
+        )
     
     st.markdown("#### Preview Voice")
     preview_text = st.text_input("Preview text", value="This is a preview of the selected voice for your YouTube script.")
@@ -234,7 +247,6 @@ if st.session_state.generated_script:
             except Exception as e:
                 st.error(str(e))
     
-    # Persistent download button
     if st.session_state.voiceover_audio is not None:
         st.download_button(
             label="⬇️ Download MP3 Voiceover",
