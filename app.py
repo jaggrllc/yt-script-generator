@@ -8,7 +8,7 @@ import io
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("News Narrator / Classic Trailer styles • Auto pitch + normalize")
+st.caption("News Narrator / Classic Trailer styles • Custom name intro • Auto normalize")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -120,31 +120,33 @@ def process_audio(audio_bytes: bytes, style: str) -> bytes:
     """Apply pitch shift (Classic Trailer) + light processing + always normalize."""
     audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
     
-    # Classic Trailer: lower the pitch
     if style == "Classic Trailer":
-        # Lower pitch by ~2 semitones (approximate via frame rate trick)
         new_sample_rate = int(audio.frame_rate * 0.89)
         audio = audio._spawn(audio.raw_data, overrides={"frame_rate": new_sample_rate})
         audio = audio.set_frame_rate(44100)
     
-    # Light compression for both styles
-    audio = compress_dynamic_range(audio, threshold=-18.0, ratio=3.0, attack=5.0, release=50.0)
+    try:
+        audio = compress_dynamic_range(audio, threshold=-18.0, ratio=3.0, attack=5.0, release=50.0)
+    except Exception:
+        pass
     
-    # Always normalize
     audio = normalize(audio)
     
-    # Export back to MP3 bytes
     buffer = io.BytesIO()
     audio.export(buffer, format="mp3", bitrate="192k")
     return buffer.getvalue()
 
-def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str, style: str) -> bytes:
+def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str, style: str, narrator_name: str) -> bytes:
     instructions = None
     if tts_model == "gpt-4o-mini-tts":
+        name_intro = ""
+        if narrator_name.strip():
+            name_intro = f" At the very beginning, briefly introduce yourself by saying something like 'I'm {narrator_name}.' Then continue with the script."
+        
         if style == "News Narrator":
-            instructions = "Speak in a clear, professional, neutral news-anchor style. Moderate pace, authoritative but calm and natural."
+            instructions = f"Speak in a clear, professional, neutral news-anchor style. Moderate pace, authoritative but calm and natural.{name_intro}"
         elif style == "Classic Trailer":
-            instructions = "Speak in a deep, dramatic, cinematic movie-trailer narrator style. Low, resonant, powerful delivery with deliberate pacing."
+            instructions = f"Speak in a deep, dramatic, cinematic movie-trailer narrator style. Low, resonant, powerful delivery with deliberate pacing.{name_intro}"
     
     max_chars = 4000
     chunks = [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
@@ -159,7 +161,6 @@ def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str, s
             audio_parts.append(resp.content)
     
     combined = b"".join(audio_parts)
-    # Always post-process + normalize
     return process_audio(combined, style)
 
 # ── Session State ──────────────────────────────────────────────────
@@ -218,6 +219,12 @@ if st.session_state.generated_script:
     with col3:
         voice_style = st.selectbox("Voice Style", ["News Narrator", "Classic Trailer"], index=0)
     
+    narrator_name = st.text_input(
+        "Custom Narrator Name (optional)",
+        placeholder="e.g. Alex Rivera, Captain James, or leave blank",
+        help="If filled, the voice will introduce itself by this name at the start (works best with gpt-4o-mini-tts)."
+    )
+    
     st.markdown("#### Preview Voice")
     preview_text = st.text_input("Preview text", value="This is a preview of the selected voice and style.")
     
@@ -225,7 +232,7 @@ if st.session_state.generated_script:
         with st.spinner("Generating preview..."):
             try:
                 client = OpenAI(api_key=openai_key)
-                audio = generate_tts(preview_text, client, voice, tts_model, voice_style)
+                audio = generate_tts(preview_text, client, voice, tts_model, voice_style, narrator_name)
                 st.audio(audio, format="audio/mp3")
             except Exception as e:
                 st.error(str(e))
@@ -235,7 +242,7 @@ if st.session_state.generated_script:
         with st.spinner("Creating and processing voiceover..."):
             try:
                 client = OpenAI(api_key=openai_key)
-                audio = generate_tts(st.session_state.generated_script, client, voice, tts_model, voice_style)
+                audio = generate_tts(st.session_state.generated_script, client, voice, tts_model, voice_style, narrator_name)
                 st.session_state.voiceover_audio = audio
                 st.success("Voiceover generated, processed, and normalized!")
                 st.audio(audio, format="audio/mp3")
@@ -252,4 +259,4 @@ if st.session_state.generated_script:
         )
 
 st.markdown("---")
-st.caption("All voiceovers are automatically processed and normalized. Classic Trailer style applies a deeper pitch.")
+st.caption("Enter a custom narrator name to have the voice introduce itself. All audio is normalized. Classic Trailer style applies a deeper pitch.")
