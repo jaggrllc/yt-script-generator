@@ -11,20 +11,19 @@ with st.sidebar:
     st.header("API Keys")
     openai_key = st.text_input("OpenAI API Key", type="password")
     serpapi_key = st.text_input("SerpAPI Key (optional)", type="password")
-    
     use_research = st.checkbox("Use SerpAPI research", value=True)
-    
     st.divider()
     model = st.selectbox("Script Model", ["gpt-4o-mini", "gpt-4o", "gpt-4.1"], index=2)
     temperature = st.slider("Creativity", 0.0, 1.0, 0.5)
-    
     st.divider()
     if st.button("🗑️ Clear Video Script Content from Session (Privacy)", type="secondary", use_container_width=True):
-        st.session_state.generated_script = ""
-        st.session_state.voiceover_audio = None
-        for key in ["fact_check", "research"]:
+        # Thoroughly clear session state
+        keys_to_clear = ["generated_script", "voiceover_audio", "fact_check", "research"]
+        for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
+        st.session_state.generated_script = ""
+        st.session_state.voiceover_audio = None
         st.success("Session content cleared for privacy.")
         st.rerun()
 
@@ -45,7 +44,7 @@ with col3:
 
 generate_btn = st.button("🚀 Generate & Proofread Script", type="primary", use_container_width=True)
 
-# ── Lazy imports & functions ───────────────────────────────────────
+# ── Lazy imports ───────────────────────────────────────────────────
 def get_openai():
     from openai import OpenAI
     return OpenAI
@@ -59,6 +58,7 @@ def get_audio_tools():
     from pydub.effects import normalize, compress_dynamic_range
     return AudioSegment, normalize, compress_dynamic_range
 
+# ── Functions ──────────────────────────────────────────────────────
 def search_facts(query: str, api_key: str) -> str:
     if not api_key:
         return "Research disabled or no SerpAPI key."
@@ -160,7 +160,9 @@ def process_audio(audio_bytes: bytes, style: str) -> bytes:
     audio.export(buffer, format="mp3", bitrate="192k")
     return buffer.getvalue()
 
-def generate_tts(text: str, openai_client, voice: str, tts_model: str, style: str, narrator_name: str, channel_name: str, include_start_intro: bool, include_end_intro: bool) -> bytes:
+def generate_tts(text: str, openai_client, voice: str, tts_model: str, style: str,
+                 narrator_name: str, channel_name: str,
+                 include_start_intro: bool, include_end_intro: bool) -> bytes:
     instructions = None
     if tts_model == "gpt-4o-mini-tts":
         intro_parts = []
@@ -239,7 +241,8 @@ if generate_btn:
             except Exception as e:
                 st.error(str(e))
 
-if st.session_state.generated_script and not generate_btn:
+# Only show persistent content if it exists and is non-empty
+if st.session_state.get("generated_script") and not generate_btn:
     st.subheader("Generated Script")
     st.text_area("Script", value=st.session_state.generated_script, height=400, key="script_display_persistent")
     if "fact_check" in st.session_state:
@@ -250,7 +253,7 @@ if st.session_state.generated_script and not generate_btn:
             st.markdown(st.session_state.research or "None")
 
 # ── Voiceover Section ──────────────────────────────────────────────
-if st.session_state.generated_script:
+if st.session_state.get("generated_script"):
     st.divider()
     st.subheader("🎙️ Voiceover Studio")
     
@@ -307,7 +310,7 @@ if st.session_state.generated_script:
             except Exception as e:
                 st.error(str(e))
     
-    if st.session_state.voiceover_audio is not None:
+    if st.session_state.get("voiceover_audio") is not None:
         st.download_button(
             label="⬇️ Download MP3 Voiceover",
             data=st.session_state.voiceover_audio,
@@ -317,4 +320,4 @@ if st.session_state.generated_script:
         )
 
 st.markdown("---")
-st.caption("If the app still fails to start, check the Streamlit Cloud logs for the exact error.")
+st.caption("Use the Clear button in the sidebar to fully remove generated script and audio from the current session.")
