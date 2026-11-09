@@ -46,25 +46,34 @@ def search_facts(query: str, api_key: str) -> str:
     try:
         client = serpapi.Client(api_key=api_key)
         
-        # Make the search more specific for recent crash/incident topics
-        search_query = query
         lower = query.lower()
-        if any(word in lower for word in ["learjet", "crash", "accident", "2026", "n722bd"]):
-            search_query = f"{query} November 2026 Greenacres OR 'Palm Beach' OR N722BD"
+        search_query = query
+        
+        if any(word in lower for word in ["learjet", "crash", "accident", "2026", "n722bd", "greenacres"]):
+            search_query = (
+                f"{query} November 2026 "
+                f"-site:facebook.com -site:instagram.com -site:twitter.com -site:x.com -site:tiktok.com "
+                f"(site:cnn.com OR site:bbc.com OR site:reuters.com OR site:apnews.com OR "
+                f"site:wikipedia.org OR site:ntsb.gov OR site:faa.gov OR site:aviation-safety.net OR "
+                f"site:flightsafety.org OR site:cbsnews.com OR site:nbcnews.com OR site:usatoday.com OR "
+                f"site:palmbeachpost.com OR site:miamiherald.com OR site:ainonline.com)"
+            )
         
         results = client.search({
             "engine": "google",
             "q": search_query,
-            "num": 10,
+            "num": 12,
             "hl": "en",
             "gl": "us"
         })
         
         snippets = []
-        for r in results.get("organic_results", [])[:8]:
+        for r in results.get("organic_results", [])[:10]:
             title = r.get("title", "")
             snippet = r.get("snippet", "")
             link = r.get("link", "")
+            if any(domain in link.lower() for domain in ["facebook.com", "instagram.com", "twitter.com", "x.com", "tiktok.com"]):
+                continue
             if title or snippet:
                 snippets.append(f"- {title}\n  {snippet}\n  Source: {link}")
         
@@ -92,7 +101,7 @@ Research (may be empty):
 {research}
 
 CRITICAL RULES:
-- Prefer facts that appear in the research above. If the research contains consistent reporting from multiple sources about a recent event, you may use those details.
+- Prefer facts that appear in the research above. If the research contains consistent reporting from multiple reputable sources about a recent event, you may use those details.
 - Do NOT invent additional names, exact quotes, speculative causes, or unconfirmed details that are not supported by the research.
 - If the research is thin, conflicting, or missing, stay general and note that details are still emerging.
 - Always attribute specific claims to public reporting or the research rather than stating them as absolute fact.
@@ -221,4 +230,4 @@ if st.session_state.generated_script:
                 st.error(str(e))
 
 st.markdown("---")
-st.caption("Improved research for recent events is active. Scripts now contain only spoken narration with no director’s directions.")
+st.caption("Research now prioritizes reputable news and official sources while excluding social media.")
