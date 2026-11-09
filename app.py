@@ -1,3 +1,12 @@
+**Revised `app.py`** with all three stronger functions fully integrated.
+
+This version includes:
+- Strict `generate_script` (blocks invention of specific events/names)
+- Stricter `proofread_script`
+- `research_is_weak` helper + warning
+- All previous features (voice preview + full voiceover)
+
+```python
 import streamlit as st
 from openai import OpenAI
 import serpapi
@@ -5,7 +14,7 @@ import serpapi
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Generate, proofread, preview voices, and create natural AI voiceovers")
+st.caption("Generate accurate scripts, fact-check them, preview voices, and create natural AI voiceovers")
 
 # ── Sidebar: API Keys ──────────────────────────────────────────────
 with st.sidebar:
@@ -21,7 +30,8 @@ with st.sidebar:
     st.markdown("**How to use**")
     st.markdown("1. Paste topic or draft")
     st.markdown("2. Generate script")
-    st.markdown("3. Preview voices, then create full voiceover")
+    st.markdown("3. Review fact-check")
+    st.markdown("4. Preview voices → generate full MP3")
 
 # ── Main Input ─────────────────────────────────────────────────────
 proposed = st.text_area(
@@ -40,7 +50,7 @@ with col3:
 
 generate_btn = st.button("🚀 Generate & Proofread Script", type="primary", use_container_width=True)
 
-# ── Generation Logic ───────────────────────────────────────────────
+# ── Helper Functions ───────────────────────────────────────────────
 def search_facts(query: str, api_key: str) -> str:
     try:
         client = serpapi.Client(api_key=api_key)
@@ -57,8 +67,14 @@ def search_facts(query: str, api_key: str) -> str:
     except Exception as e:
         return f"SerpAPI error: {str(e)}"
 
+def research_is_weak(research: str) -> bool:
+    """Returns True if research is too thin to support specific claims."""
+    if not research or "SerpAPI error" in research or "No strong search results" in research:
+        return True
+    return len(research.strip()) < 150
+
 def generate_script(proposed_text: str, research: str, openai_client: OpenAI) -> str:
-    prompt = f"""You are an expert YouTube scriptwriter.
+    prompt = f"""You are a careful YouTube scriptwriter who prioritizes accuracy.
 
 User input (topic, outline, or draft):
 {proposed_text}
@@ -70,12 +86,17 @@ Style: {style}
 Real-time research (from Google via SerpAPI):
 {research}
 
+STRICT RULES:
+- Do NOT invent specific real-world events, accidents, deaths, named individuals, exact dates, flight numbers, or official investigations unless they are clearly supported by the research above.
+- If the research does not contain concrete facts about a specific incident, treat the topic as general or educational. Do not create a fictional tragedy and present it as real.
+- Prefer well-established public knowledge or clearly label speculative/hypothetical sections.
+- If you must mention an event that is not in the research, explicitly say “according to reports” or “unconfirmed” — or better, avoid it.
+
 Write a complete, engaging YouTube video script that:
 - Has a strong hook in the first 15 seconds
 - Clear structure (Hook → Intro → Main Points → CTA)
 - Natural spoken language
-- Incorporates accurate facts from the research where relevant
-- Avoids unverified claims
+- Stays grounded in the provided research
 
 Return ONLY the script text."""
 
@@ -87,7 +108,7 @@ Return ONLY the script text."""
     return response.choices[0].message.content.strip()
 
 def proofread_script(script: str, research: str, openai_client: OpenAI) -> str:
-    prompt = f"""Proofread this YouTube script and check for factual accuracy.
+    prompt = f"""You are a strict fact-checker. Analyze this YouTube script against the research data.
 
 Script:
 {script}
@@ -95,16 +116,22 @@ Script:
 Research data:
 {research}
 
-Provide:
-1. A short list of any potential errors, unverified claims, or weak facts
-2. Suggested corrections
-3. Overall accuracy rating (High / Medium / Low)
+Rules:
+- Flag any specific real-world claims (named people, exact dates, accident details, official investigations, numbers) that are NOT supported by the research.
+- A future or very recent date with no supporting research should be treated as highly suspicious.
+- Do not assume the model’s internal knowledge is reliable for recent events.
 
-Be concise and practical."""
+Provide:
+1. List of unverified or potentially fabricated claims (be specific)
+2. Suggested safe rewrites or removals
+3. Overall Accuracy Rating: High / Medium / Low
+4. Recommendation: “Safe to publish” or “Needs major revision / more research”
+
+Be direct and practical."""
 
     response = openai_client.chat.completions.create(
         model=model,
-        temperature=0.2,
+        temperature=0.1,
         messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content.strip()
@@ -143,6 +170,11 @@ if generate_btn:
                 client = OpenAI(api_key=openai_key)
                 
                 research = search_facts(proposed[:200], serpapi_key)
+                
+                # Warn if research is weak
+                if research_is_weak(research):
+                    st.warning("Research results are limited. The script will stay general to avoid inventing specific events.")
+                
                 generated = generate_script(proposed, research, client)
                 fact_check = proofread_script(generated, research, client)
                 
@@ -238,4 +270,7 @@ if st.session_state.generated_script:
                 st.info("Make sure your OpenAI key has TTS access.")
 
 st.markdown("---")
-st.caption("Tip: Preview voices first, then generate the full MP3 once you find the one you like.")
+st.caption("Stronger accuracy controls active • Preview voices before generating the full MP3.")
+```
+
+This is the complete revised `app.py`. Replace your current file with this version and redeploy. It should now resist inventing specific tragedies or named individuals when research is weak.
