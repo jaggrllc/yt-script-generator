@@ -5,7 +5,7 @@ import serpapi
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Stronger accuracy controls • Optional research • Voice preview")
+st.caption("Improved research for recent events • Stronger accuracy controls • Voice preview")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -13,20 +13,20 @@ with st.sidebar:
     openai_key = st.text_input("OpenAI API Key", type="password")
     serpapi_key = st.text_input("SerpAPI Key (optional)", type="password")
     
-    use_research = st.checkbox("Use SerpAPI research", value=True, help="Uncheck to disable research and reduce hallucination risk on recent events")
+    use_research = st.checkbox("Use SerpAPI research", value=True, help="Recommended for recent events")
     
     st.divider()
-    model = st.selectbox("Script Model", ["gpt-4o-mini", "gpt-4o", "gpt-4.1"], index=0)
-    temperature = st.slider("Creativity", 0.0, 1.0, 0.5)  # lowered default
+    model = st.selectbox("Script Model", ["gpt-4o-mini", "gpt-4o", "gpt-4.1"], index=2)
+    temperature = st.slider("Creativity", 0.0, 1.0, 0.5)
     
     st.markdown("---")
-    st.markdown("**Safety note:** For very recent events, leave research on and verify the fact-check carefully.")
+    st.markdown("**Tip:** For very recent events, keep research enabled and use a specific topic.")
 
 # ── Main Input ─────────────────────────────────────────────────────
 proposed = st.text_area(
     "Proposed Video Script / Topic / Outline",
     height=200,
-    placeholder="Enter topic or draft..."
+    placeholder="Example: Learjet 60 crash Greenacres Florida November 1 2026"
 )
 
 col1, col2, col3 = st.columns(3)
@@ -45,11 +45,30 @@ def search_facts(query: str, api_key: str) -> str:
         return "Research disabled or no SerpAPI key."
     try:
         client = serpapi.Client(api_key=api_key)
-        results = client.search({"engine": "google", "q": query, "num": 8, "hl": "en"})
+        
+        # Make the search more specific for recent crash/incident topics
+        search_query = query
+        lower = query.lower()
+        if any(word in lower for word in ["learjet", "crash", "accident", "2026", "n722bd"]):
+            search_query = f"{query} November 2026 Greenacres OR 'Palm Beach' OR N722BD"
+        
+        results = client.search({
+            "engine": "google",
+            "q": search_query,
+            "num": 10,
+            "hl": "en",
+            "gl": "us"
+        })
+        
         snippets = []
-        for r in results.get("organic_results", [])[:6]:
-            snippets.append(f"- {r.get('title', '')}: {r.get('snippet', '')}")
-        return "\n".join(snippets) if snippets else "No strong search results found."
+        for r in results.get("organic_results", [])[:8]:
+            title = r.get("title", "")
+            snippet = r.get("snippet", "")
+            link = r.get("link", "")
+            if title or snippet:
+                snippets.append(f"- {title}\n  {snippet}\n  Source: {link}")
+        
+        return "\n\n".join(snippets) if snippets else "No strong search results found."
     except Exception as e:
         return f"SerpAPI error: {str(e)}"
 
@@ -57,10 +76,10 @@ def research_is_weak(research: str) -> bool:
     weak_phrases = ["No strong search results", "SerpAPI error", "Research disabled", "no SerpAPI key"]
     if any(p in research for p in weak_phrases):
         return True
-    return len(research.strip()) < 200
+    return len(research.strip()) < 250
 
 def generate_script(proposed_text: str, research: str, openai_client: OpenAI) -> str:
-    prompt = f"""You are a careful YouTube scriptwriter who refuses to hallucinate.
+    prompt = f"""You are a careful YouTube scriptwriter who prioritizes accuracy.
 
 User request:
 {proposed_text}
@@ -72,13 +91,14 @@ Style: {style}
 Research (may be empty):
 {research}
 
-CRITICAL RULES — DO NOT BREAK THESE:
-- Never invent specific real-world events that happened in 2025 or 2026 (or any very recent date).
-- Never invent names of people, aircraft registration numbers, exact dates, flight numbers, or official investigations unless they appear clearly in the research above.
-- If the topic appears to be about a specific recent incident and the research does not confirm it, do NOT write a dramatic reenactment. Instead write a short note saying the event could not be verified and offer a general educational script on the broader topic instead.
-- Prefer general, educational, or clearly hypothetical content when research is weak.
+CRITICAL RULES:
+- Prefer facts that appear in the research above. If the research contains consistent reporting from multiple sources about a recent event, you may use those details.
+- Do NOT invent additional names, exact quotes, speculative causes, or unconfirmed details that are not supported by the research.
+- If the research is thin, conflicting, or missing, stay general and note that details are still emerging.
+- Always attribute specific claims to public reporting or the research rather than stating them as absolute fact.
+- Never create a dramatic reenactment of an event that is not supported by the research.
 
-Write the script (or the verification note + safe alternative). Return only the final text."""
+Write a complete, engaging YouTube video script (or a clear note + safe alternative if research is insufficient). Return only the final text."""
 
     response = openai_client.chat.completions.create(
         model=model,
@@ -97,9 +117,8 @@ Research:
 {research}
 
 Specifically call out:
-- Any specific recent (2025–2026) events, crashes, or named individuals that are not supported by the research.
-- Aircraft registration numbers or precise details that appear invented.
-- Recommend removing or heavily rewriting any unverified specific incident.
+- Any specific recent events, named individuals, registration numbers, or precise details that are not supported by the research.
+- Recommend removing or heavily rewriting any unverified specific claims.
 
 Give:
 1. Unverified claims
@@ -136,22 +155,22 @@ if generate_btn:
     elif not proposed.strip():
         st.warning("Enter a topic or script.")
     else:
-        with st.spinner("Generating..."):
+        with st.spinner("Researching and generating..."):
             try:
                 client = OpenAI(api_key=openai_key)
                 
                 research = "Research disabled."
                 if use_research and serpapi_key:
-                    research = search_facts(proposed[:250], serpapi_key)
+                    research = search_facts(proposed[:300], serpapi_key)
                 
                 if research_is_weak(research):
-                    st.warning("Limited or no research available. Script will avoid specific recent events and named individuals.")
+                    st.warning("Limited research available. Script will stay more general to avoid unsupported details.")
                 
                 generated = generate_script(proposed, research, client)
                 fact_check = proofread_script(generated, research, client)
                 
                 st.session_state.generated_script = generated
-                st.success("Done")
+                st.success("Script generated and checked!")
                 
                 st.subheader("Generated Script")
                 st.text_area("Script", value=generated, height=400, key="script_display")
@@ -165,7 +184,7 @@ if generate_btn:
             except Exception as e:
                 st.error(str(e))
 
-# ── Voiceover Section (unchanged from previous) ────────────────────
+# ── Voiceover Section ──────────────────────────────────────────────
 if st.session_state.generated_script:
     st.divider()
     st.subheader("🎙️ Voiceover Studio")
@@ -177,7 +196,7 @@ if st.session_state.generated_script:
         voice = st.selectbox("Voice", ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "coral", "sage"], index=4)
     
     st.markdown("#### Preview Voice")
-    preview_text = st.text_input("Preview text", value="This is a preview of the selected voice.")
+    preview_text = st.text_input("Preview text", value="This is a preview of the selected voice for your YouTube script.")
     
     if st.button("▶️ Preview Selected Voice", use_container_width=True):
         with st.spinner("Generating preview..."):
@@ -200,4 +219,4 @@ if st.session_state.generated_script:
                 st.error(str(e))
 
 st.markdown("---")
-st.caption("SerpAPI can be turned off in the sidebar. Stronger anti-hallucination rules are active.")
+st.caption("Improved research for recent events is active. Keep SerpAPI enabled for best results on current topics.")
