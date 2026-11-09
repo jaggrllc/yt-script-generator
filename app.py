@@ -1,12 +1,11 @@
 import streamlit as st
 from openai import OpenAI
 import serpapi
-import io
 
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Generate, proofread, and turn your script into natural AI voiceover")
+st.caption("Generate, proofread, preview voices, and create natural AI voiceovers")
 
 # ── Sidebar: API Keys ──────────────────────────────────────────────
 with st.sidebar:
@@ -22,7 +21,7 @@ with st.sidebar:
     st.markdown("**How to use**")
     st.markdown("1. Paste topic or draft")
     st.markdown("2. Generate script")
-    st.markdown("3. Create voiceover below")
+    st.markdown("3. Preview voices, then create full voiceover")
 
 # ── Main Input ─────────────────────────────────────────────────────
 proposed = st.text_area(
@@ -110,10 +109,10 @@ Be concise and practical."""
     )
     return response.choices[0].message.content.strip()
 
-def generate_voiceover(script: str, openai_client: OpenAI, voice: str, tts_model: str) -> bytes:
-    """Generate TTS audio. Handles long scripts by chunking (OpenAI limit ~4096 chars)."""
+def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str) -> bytes:
+    """Generate TTS audio. Handles long text by chunking."""
     max_chars = 4000
-    chunks = [script[i:i + max_chars] for i in range(0, len(script), max_chars)]
+    chunks = [text[i:i + max_chars] for i in range(0, len(text), max_chars)]
     
     audio_parts = []
     for chunk in chunks:
@@ -127,7 +126,6 @@ def generate_voiceover(script: str, openai_client: OpenAI, voice: str, tts_model
         )
         audio_parts.append(response.content)
     
-    # Combine all chunks into one MP3
     return b"".join(audio_parts)
 
 # ── Run Generation ─────────────────────────────────────────────────
@@ -169,10 +167,10 @@ if generate_btn:
                 st.error(f"Error: {str(e)}")
                 st.info("Check your API keys and try again.")
 
-# ── Voiceover Section (appears after script is generated) ─────────
+# ── Voiceover Section (with Preview) ───────────────────────────────
 if st.session_state.generated_script:
     st.divider()
-    st.subheader("🎙️ Generate Natural Voiceover")
+    st.subheader("🎙️ Voiceover Studio")
     
     col_v1, col_v2 = st.columns(2)
     with col_v1:
@@ -186,14 +184,39 @@ if st.session_state.generated_script:
         voice = st.selectbox(
             "Voice",
             ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "coral", "sage"],
-            index=4  # nova is energetic and popular for YouTube
+            index=4
         )
     
-    if st.button("🔊 Generate Voiceover", type="secondary", use_container_width=True):
-        with st.spinner("Creating natural voiceover..."):
+    # ── Voice Preview ──────────────────────────────────────────────
+    st.markdown("#### Preview Voice")
+    preview_text = st.text_input(
+        "Preview text",
+        value="This is a preview of the selected voice for your YouTube script. How does it sound?",
+        help="Short sample to test the voice before generating the full audio"
+    )
+    
+    if st.button("▶️ Preview Selected Voice", use_container_width=True):
+        if not preview_text.strip():
+            st.warning("Enter some preview text.")
+        else:
+            with st.spinner("Generating preview..."):
+                try:
+                    client = OpenAI(api_key=openai_key)
+                    preview_audio = generate_tts(preview_text, client, voice, tts_model)
+                    st.audio(preview_audio, format="audio/mp3")
+                    st.caption(f"Preview using **{voice}** voice")
+                except Exception as e:
+                    st.error(f"Preview error: {str(e)}")
+    
+    st.markdown("---")
+    
+    # ── Full Voiceover Generation ──────────────────────────────────
+    st.markdown("#### Full Script Voiceover")
+    if st.button("🔊 Generate Full Voiceover MP3", type="primary", use_container_width=True):
+        with st.spinner("Creating full voiceover (this may take a moment for long scripts)..."):
             try:
                 client = OpenAI(api_key=openai_key)
-                audio_bytes = generate_voiceover(
+                audio_bytes = generate_tts(
                     st.session_state.generated_script,
                     client,
                     voice,
@@ -203,16 +226,16 @@ if st.session_state.generated_script:
                 st.audio(audio_bytes, format="audio/mp3")
                 
                 st.download_button(
-                    label="⬇️ Download Voiceover (MP3)",
+                    label="⬇️ Download Full Voiceover (MP3)",
                     data=audio_bytes,
                     file_name="youtube_voiceover.mp3",
                     mime="audio/mp3"
                 )
-                st.success("Voiceover ready!")
+                st.success("Full voiceover ready!")
                 
             except Exception as e:
                 st.error(f"TTS Error: {str(e)}")
-                st.info("Make sure your OpenAI key has TTS access and the script isn’t too long.")
+                st.info("Make sure your OpenAI key has TTS access.")
 
 st.markdown("---")
-st.caption("Tip: For Streamlit Cloud, put API keys in Secrets for better security.")
+st.caption("Tip: Preview voices first, then generate the full MP3 once you find the one you like.")
