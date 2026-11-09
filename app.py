@@ -8,7 +8,7 @@ import io
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Start + End intro control • Channel name support")
+st.caption("Start + End intro control • Channel name support • Privacy clear")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -21,6 +21,17 @@ with st.sidebar:
     st.divider()
     model = st.selectbox("Script Model", ["gpt-4o-mini", "gpt-4o", "gpt-4.1"], index=2)
     temperature = st.slider("Creativity", 0.0, 1.0, 0.5)
+    
+    st.divider()
+    if st.button("🗑️ Clear Video Script Content from Session (Privacy)", type="secondary", use_container_width=True):
+        st.session_state.generated_script = ""
+        st.session_state.voiceover_audio = None
+        if "fact_check" in st.session_state:
+            del st.session_state.fact_check
+        if "research" in st.session_state:
+            del st.session_state.research
+        st.success("Session content cleared for privacy.")
+        st.rerun()
 
 # ── Main Input ─────────────────────────────────────────────────────
 proposed = st.text_area(
@@ -203,6 +214,8 @@ if generate_btn:
                 fact_check = proofread_script(generated, research, client)
                 
                 st.session_state.generated_script = generated
+                st.session_state.fact_check = fact_check
+                st.session_state.research = research
                 st.session_state.voiceover_audio = None
                 st.success("Script generated and checked!")
                 
@@ -215,6 +228,17 @@ if generate_btn:
                     st.markdown(research or "None")
             except Exception as e:
                 st.error(str(e))
+
+# Show previously generated content if it exists in session (until cleared)
+if st.session_state.generated_script and not generate_btn:
+    st.subheader("Generated Script")
+    st.text_area("Script", value=st.session_state.generated_script, height=400, key="script_display_persistent")
+    if "fact_check" in st.session_state:
+        with st.expander("🔍 Fact-Check Notes", expanded=False):
+            st.markdown(st.session_state.fact_check)
+    if "research" in st.session_state:
+        with st.expander("Research Used"):
+            st.markdown(st.session_state.research or "None")
 
 # ── Voiceover Section ──────────────────────────────────────────────
 if st.session_state.generated_script:
@@ -284,4 +308,4 @@ if st.session_state.generated_script:
         )
 
 st.markdown("---")
-st.caption("Optional channel name is included in start and/or end introductions when enabled.")
+st.caption("Use the Clear button in the sidebar to remove generated script and audio from the current session.")
