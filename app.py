@@ -156,10 +156,13 @@ def generate_tts(text: str, openai_client: OpenAI, voice: str, tts_model: str) -
             audio_parts.append(resp.content)
     return b"".join(audio_parts)
 
-# ── Generation ─────────────────────────────────────────────────────
+# ── Session State ──────────────────────────────────────────────────
 if "generated_script" not in st.session_state:
     st.session_state.generated_script = ""
+if "voiceover_audio" not in st.session_state:
+    st.session_state.voiceover_audio = None
 
+# ── Generation ─────────────────────────────────────────────────────
 if generate_btn:
     if not openai_key:
         st.error("OpenAI API key is required.")
@@ -181,6 +184,7 @@ if generate_btn:
                 fact_check = proofread_script(generated, research, client)
                 
                 st.session_state.generated_script = generated
+                st.session_state.voiceover_audio = None  # Clear previous audio
                 st.success("Script generated and checked!")
                 
                 st.subheader("Generated Script")
@@ -224,10 +228,21 @@ if st.session_state.generated_script:
             try:
                 client = OpenAI(api_key=openai_key)
                 audio = generate_tts(st.session_state.generated_script, client, voice, tts_model)
+                st.session_state.voiceover_audio = audio
+                st.success("Voiceover generated!")
                 st.audio(audio, format="audio/mp3")
-                st.download_button("⬇️ Download MP3", audio, "youtube_voiceover.mp3", "audio/mp3")
             except Exception as e:
                 st.error(str(e))
+    
+    # Persistent download button
+    if st.session_state.voiceover_audio is not None:
+        st.download_button(
+            label="⬇️ Download MP3 Voiceover",
+            data=st.session_state.voiceover_audio,
+            file_name="youtube_voiceover.mp3",
+            mime="audio/mp3",
+            use_container_width=True
+        )
 
 st.markdown("---")
 st.caption("Research now prioritizes reputable news and official sources while excluding social media.")
