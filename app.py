@@ -1,12 +1,3 @@
-**Revised `app.py`** with all three stronger functions fully integrated.
-
-This version includes:
-- Strict `generate_script` (blocks invention of specific events/names)
-- Stricter `proofread_script`
-- `research_is_weak` helper + warning
-- All previous features (voice preview + full voiceover)
-
-```python
 import streamlit as st
 from openai import OpenAI
 import serpapi
