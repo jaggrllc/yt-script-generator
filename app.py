@@ -1,12 +1,12 @@
 import streamlit as st
 from openai import OpenAI
 import serpapi
-import json
+import io
 
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
-st.title("🎬 YouTube Video Script Generator")
-st.caption("Generate + proofread YouTube scripts using OpenAI + SerpAPI fact-checking")
+st.title("🎬 YouTube Video Script Generator + Voiceover")
+st.caption("Generate, proofread, and turn your script into natural AI voiceover")
 
 # ── Sidebar: API Keys ──────────────────────────────────────────────
 with st.sidebar:
@@ -15,14 +15,14 @@ with st.sidebar:
     serpapi_key = st.text_input("SerpAPI Key", type="password", help="From serpapi.com")
     
     st.divider()
-    model = st.selectbox("Model", ["gpt-4o-mini", "gpt-4o", "gpt-4.1"], index=0)
+    model = st.selectbox("Script Model", ["gpt-4o-mini", "gpt-4o", "gpt-4.1"], index=0)
     temperature = st.slider("Creativity", 0.0, 1.0, 0.7)
     
     st.markdown("---")
     st.markdown("**How to use**")
-    st.markdown("1. Paste your proposed script or topic above")
-    st.markdown("2. Click Generate")
-    st.markdown("3. Review the polished script + fact-check below")
+    st.markdown("1. Paste topic or draft")
+    st.markdown("2. Generate script")
+    st.markdown("3. Create voiceover below")
 
 # ── Main Input ─────────────────────────────────────────────────────
 proposed = st.text_area(
@@ -110,7 +110,30 @@ Be concise and practical."""
     )
     return response.choices[0].message.content.strip()
 
+def generate_voiceover(script: str, openai_client: OpenAI, voice: str, tts_model: str) -> bytes:
+    """Generate TTS audio. Handles long scripts by chunking (OpenAI limit ~4096 chars)."""
+    max_chars = 4000
+    chunks = [script[i:i + max_chars] for i in range(0, len(script), max_chars)]
+    
+    audio_parts = []
+    for chunk in chunks:
+        if not chunk.strip():
+            continue
+        response = openai_client.audio.speech.create(
+            model=tts_model,
+            voice=voice,
+            input=chunk,
+            response_format="mp3"
+        )
+        audio_parts.append(response.content)
+    
+    # Combine all chunks into one MP3
+    return b"".join(audio_parts)
+
 # ── Run Generation ─────────────────────────────────────────────────
+if "generated_script" not in st.session_state:
+    st.session_state.generated_script = ""
+
 if generate_btn:
     if not openai_key or not serpapi_key:
         st.error("Please enter both API keys in the sidebar.")
@@ -121,16 +144,11 @@ if generate_btn:
             try:
                 client = OpenAI(api_key=openai_key)
                 
-                # Research
                 research = search_facts(proposed[:200], serpapi_key)
-                
-                # Generate
                 generated = generate_script(proposed, research, client)
-                
-                # Proofread
                 fact_check = proofread_script(generated, research, client)
                 
-                # Display results
+                st.session_state.generated_script = generated
                 st.success("Script generated and checked!")
                 
                 st.subheader("Generated YouTube Video Script")
@@ -138,7 +156,7 @@ if generate_btn:
                     "Generated Script (copy this)",
                     value=generated,
                     height=400,
-                    key="generated_script"
+                    key="generated_script_display"
                 )
                 
                 with st.expander("🔍 Fact-Check & Proofreading Notes", expanded=True):
@@ -151,5 +169,50 @@ if generate_btn:
                 st.error(f"Error: {str(e)}")
                 st.info("Check your API keys and try again.")
 
+# ── Voiceover Section (appears after script is generated) ─────────
+if st.session_state.generated_script:
+    st.divider()
+    st.subheader("🎙️ Generate Natural Voiceover")
+    
+    col_v1, col_v2 = st.columns(2)
+    with col_v1:
+        tts_model = st.selectbox(
+            "TTS Model",
+            ["tts-1", "tts-1-hd", "gpt-4o-mini-tts"],
+            index=1,
+            help="tts-1-hd = higher quality • gpt-4o-mini-tts = more controllable"
+        )
+    with col_v2:
+        voice = st.selectbox(
+            "Voice",
+            ["alloy", "echo", "fable", "onyx", "nova", "shimmer", "ash", "coral", "sage"],
+            index=4  # nova is energetic and popular for YouTube
+        )
+    
+    if st.button("🔊 Generate Voiceover", type="secondary", use_container_width=True):
+        with st.spinner("Creating natural voiceover..."):
+            try:
+                client = OpenAI(api_key=openai_key)
+                audio_bytes = generate_voiceover(
+                    st.session_state.generated_script,
+                    client,
+                    voice,
+                    tts_model
+                )
+                
+                st.audio(audio_bytes, format="audio/mp3")
+                
+                st.download_button(
+                    label="⬇️ Download Voiceover (MP3)",
+                    data=audio_bytes,
+                    file_name="youtube_voiceover.mp3",
+                    mime="audio/mp3"
+                )
+                st.success("Voiceover ready!")
+                
+            except Exception as e:
+                st.error(f"TTS Error: {str(e)}")
+                st.info("Make sure your OpenAI key has TTS access and the script isn’t too long.")
+
 st.markdown("---")
-st.caption("Tip: For Streamlit Cloud deployment, add keys to Secrets instead of the sidebar for better security.")
+st.caption("Tip: For Streamlit Cloud, put API keys in Secrets for better security.")
