@@ -271,6 +271,3 @@ if st.session_state.generated_script:
 
 st.markdown("---")
 st.caption("Stronger accuracy controls active • Preview voices before generating the full MP3.")
-```
-
-This is the complete revised `app.py`. Replace your current file with this version and redeploy. It should now resist inventing specific tragedies or named individuals when research is weak.
