@@ -97,8 +97,10 @@ CRITICAL RULES:
 - If the research is thin, conflicting, or missing, stay general and note that details are still emerging.
 - Always attribute specific claims to public reporting or the research rather than stating them as absolute fact.
 - Never create a dramatic reenactment of an event that is not supported by the research.
+- Write ONLY the spoken script that a narrator would say on camera.
+- Do NOT include any director’s directions, stage directions, production notes, B-roll suggestions, camera instructions, [on-screen text], or anything in brackets or parentheses that is not meant to be spoken.
 
-Write a complete, engaging YouTube video script (or a clear note + safe alternative if research is insufficient). Return only the final text."""
+Write a complete, engaging YouTube video script consisting only of the words to be spoken. Return only the final script text."""
 
     response = openai_client.chat.completions.create(
         model=model,
@@ -219,4 +221,4 @@ if st.session_state.generated_script:
                 st.error(str(e))
 
 st.markdown("---")
-st.caption("Improved research for recent events is active. Keep SerpAPI enabled for best results on current topics.")
+st.caption("Improved research for recent events is active. Scripts now contain only spoken narration with no director’s directions.")
