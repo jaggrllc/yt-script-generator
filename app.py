@@ -4,7 +4,7 @@ import io
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Start + End intro control • Channel name support • Privacy clear")
+st.caption("Multiple input types • Start + End intro • Channel name • Privacy clear")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -17,7 +17,6 @@ with st.sidebar:
     temperature = st.slider("Creativity", 0.0, 1.0, 0.5)
     st.divider()
     if st.button("🗑️ Clear Video Script Content from Session (Privacy)", type="secondary", use_container_width=True):
-        # Thoroughly clear session state
         keys_to_clear = ["generated_script", "voiceover_audio", "fact_check", "research"]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -27,11 +26,31 @@ with st.sidebar:
         st.success("Session content cleared for privacy.")
         st.rerun()
 
-# ── Main Input ─────────────────────────────────────────────────────
+# ── Main Inputs ────────────────────────────────────────────────────
+st.subheader("Input Sources")
+
 proposed = st.text_area(
-    "Proposed Video Script / Topic / Outline",
-    height=200,
-    placeholder="Example: Learjet 60 crash Greenacres Florida November 1 2026"
+    "Proposed Video Script / Topic / Outline (optional)",
+    height=150,
+    placeholder="Paste a full outline, draft script, or topic description here..."
+)
+
+youtube_urls = st.text_area(
+    "YouTube Video URLs (optional, one per line)",
+    height=100,
+    placeholder="https://www.youtube.com/watch?v=...\nhttps://youtu.be/..."
+)
+
+news_urls = st.text_area(
+    "News Site URLs (optional, one per line)",
+    height=100,
+    placeholder="https://www.cnn.com/...\nhttps://www.bbc.com/..."
+)
+
+headlines = st.text_area(
+    "Simple Headline Titles (optional, one per line)",
+    height=100,
+    placeholder="Learjet 60 crashes in Greenacres, Florida\nNine people killed in private jet accident"
 )
 
 col1, col2, col3 = st.columns(3)
@@ -92,11 +111,23 @@ def research_is_weak(research: str) -> bool:
     weak = ["No strong search results", "SerpAPI error", "Research disabled", "no SerpAPI key"]
     return any(p in research for p in weak) or len(research.strip()) < 250
 
-def generate_script(proposed_text: str, research: str, openai_client) -> str:
+def build_user_request(proposed, youtube_urls, news_urls, headlines):
+    parts = []
+    if proposed.strip():
+        parts.append(f"Proposed script / topic / outline:\n{proposed.strip()}")
+    if youtube_urls.strip():
+        parts.append(f"YouTube video URLs to reference:\n{youtube_urls.strip()}")
+    if news_urls.strip():
+        parts.append(f"News article URLs to reference:\n{news_urls.strip()}")
+    if headlines.strip():
+        parts.append(f"Headline titles to base the video on:\n{headlines.strip()}")
+    return "\n\n".join(parts) if parts else "No specific input provided. Create a general script on the given topic."
+
+def generate_script(user_request: str, research: str, openai_client) -> str:
     prompt = f"""You are a careful YouTube scriptwriter who prioritizes accuracy and clarity.
 
-User request:
-{proposed_text}
+User request / source material:
+{user_request}
 
 Tone: {tone}
 Target length: {length}
@@ -106,11 +137,12 @@ Research (may be empty):
 {research}
 
 CRITICAL RULES:
-- Prefer facts that appear in the research above. Do not invent unsupported details.
+- Use the provided outlines, YouTube URLs, news URLs, and headlines as the primary source material.
+- Prefer facts that appear in the research or the user-provided material. Do not invent unsupported details.
 - Do NOT repeat the same facts, details, or sentences. Each piece of information should appear only once.
 - Write a clear, linear script that moves forward without looping or restating earlier points.
 - Write ONLY the spoken script that a narrator would say. No director’s directions, stage directions, production notes, or bracketed text.
-- Do not include any self-introduction unless the user specifically requests it in the topic.
+- Do not include any self-introduction unless the user specifically requests it.
 
 Return only the final spoken script text."""
     response = openai_client.chat.completions.create(
@@ -208,21 +240,26 @@ if "voiceover_audio" not in st.session_state:
 if generate_btn:
     if not openai_key:
         st.error("OpenAI API key is required.")
-    elif not proposed.strip():
-        st.warning("Enter a topic or script.")
+    elif not any([proposed.strip(), youtube_urls.strip(), news_urls.strip(), headlines.strip()]):
+        st.warning("Please provide at least one input (script/topic, YouTube URL, news URL, or headline).")
     else:
         with st.spinner("Researching and generating..."):
             try:
                 OpenAI = get_openai()
                 client = OpenAI(api_key=openai_key)
+                
+                user_request = build_user_request(proposed, youtube_urls, news_urls, headlines)
+                
                 research = "Research disabled."
                 if use_research and serpapi_key:
-                    research = search_facts(proposed[:300], serpapi_key)
+                    # Use the first non-empty input as the research query
+                    query_source = headlines or proposed or youtube_urls or news_urls
+                    research = search_facts(query_source[:300], serpapi_key)
                 
                 if research_is_weak(research):
                     st.warning("Limited research available. Script will stay more general.")
                 
-                generated = generate_script(proposed, research, client)
+                generated = generate_script(user_request, research, client)
                 fact_check = proofread_script(generated, research, client)
                 
                 st.session_state.generated_script = generated
@@ -241,7 +278,6 @@ if generate_btn:
             except Exception as e:
                 st.error(str(e))
 
-# Only show persistent content if it exists and is non-empty
 if st.session_state.get("generated_script") and not generate_btn:
     st.subheader("Generated Script")
     st.text_area("Script", value=st.session_state.generated_script, height=400, key="script_display_persistent")
@@ -320,4 +356,4 @@ if st.session_state.get("generated_script"):
         )
 
 st.markdown("---")
-st.caption("Use the Clear button in the sidebar to fully remove generated script and audio from the current session.")
+st.caption("You can now mix outlines, YouTube URLs, news URLs, and headlines. The script is generated on the fly from all provided sources.")
