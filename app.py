@@ -4,7 +4,7 @@ import io
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Multiple input types • Start + End intro • Channel name • Privacy clear")
+st.caption("Sequence of events • Journalistic neutral language • Multiple inputs")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -137,6 +137,8 @@ Research (may be empty):
 {research}
 
 CRITICAL RULES:
+- Focus the entire script on the sequence of events. Present the story chronologically, step by step, as the events unfolded.
+- Use journalistic and neutral language. Avoid sensationalism, emotional language, speculation, or dramatic phrasing.
 - Use the provided outlines, YouTube URLs, news URLs, and headlines as the primary source material.
 - Prefer facts that appear in the research or the user-provided material. Do not invent unsupported details.
 - Do NOT repeat the same facts, details, or sentences. Each piece of information should appear only once.
@@ -165,7 +167,7 @@ Provide:
 2. Suggested fixes
 3. Accuracy rating (High/Medium/Low)
 4. Publish recommendation
-Also note any obvious repetitions."""
+Also note any obvious repetitions or deviations from neutral journalistic language."""
     response = openai_client.chat.completions.create(
         model=model, temperature=0.1,
         messages=[{"role": "user", "content": prompt}]
@@ -252,7 +254,6 @@ if generate_btn:
                 
                 research = "Research disabled."
                 if use_research and serpapi_key:
-                    # Use the first non-empty input as the research query
                     query_source = headlines or proposed or youtube_urls or news_urls
                     research = search_facts(query_source[:300], serpapi_key)
                 
@@ -356,4 +357,4 @@ if st.session_state.get("generated_script"):
         )
 
 st.markdown("---")
-st.caption("You can now mix outlines, YouTube URLs, news URLs, and headlines. The script is generated on the fly from all provided sources.")
+st.caption("Scripts are now focused on the sequence of events and written in journalistic, neutral language.")
