@@ -4,7 +4,7 @@ import io
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Sequence of events • Journalistic neutral language • Multiple inputs")
+st.caption("Sequence of events • Neutral language • Avoids disturbing words")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -139,6 +139,8 @@ Research (may be empty):
 CRITICAL RULES:
 - Focus the entire script on the sequence of events. Present the story chronologically, step by step, as the events unfolded.
 - Use journalistic and neutral language. Avoid sensationalism, emotional language, speculation, or dramatic phrasing.
+- Avoid disturbing or graphic words such as kill, killed, die, died, death, dead, murder, murdered, blood, gore, or similar terms. 
+  Instead use neutral alternatives such as “lost their lives,” “fatalities,” “perished,” “passed away,” “did not survive,” or “were fatally injured.”
 - Use the provided outlines, YouTube URLs, news URLs, and headlines as the primary source material.
 - Prefer facts that appear in the research or the user-provided material. Do not invent unsupported details.
 - Do NOT repeat the same facts, details, or sentences. Each piece of information should appear only once.
@@ -167,7 +169,7 @@ Provide:
 2. Suggested fixes
 3. Accuracy rating (High/Medium/Low)
 4. Publish recommendation
-Also note any obvious repetitions or deviations from neutral journalistic language."""
+Also note any obvious repetitions, deviations from neutral journalistic language, or use of disturbing words (kill, died, death, etc.)."""
     response = openai_client.chat.completions.create(
         model=model, temperature=0.1,
         messages=[{"role": "user", "content": prompt}]
@@ -357,4 +359,4 @@ if st.session_state.get("generated_script"):
         )
 
 st.markdown("---")
-st.caption("Scripts are now focused on the sequence of events and written in journalistic, neutral language.")
+st.caption("Scripts now avoid disturbing words (kill, died, death, etc.) and use neutral journalistic alternatives.")
