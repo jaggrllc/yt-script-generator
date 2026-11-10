@@ -4,7 +4,7 @@ import io
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Editable script • Generate voiceover from edits • Neutral language")
+st.caption("Editable script • 30-60 second option • Neutral language")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -57,7 +57,7 @@ col1, col2, col3 = st.columns(3)
 with col1:
     tone = st.selectbox("Tone", ["Educational", "Conversational", "Storytelling", "Energetic", "Professional"])
 with col2:
-    length = st.selectbox("Target Length", ["3-5 min", "6-10 min", "11-15 min", "15+ min"])
+    length = st.selectbox("Target Length", ["30-60 sec", "3-5 min", "6-10 min", "11-15 min", "15+ min"], index=0)
 with col3:
     style = st.selectbox("Style", ["Standard YouTube", "Tutorial", "Review", "Story", "Listicle"])
 
@@ -147,6 +147,7 @@ CRITICAL RULES:
 - Write a clear, linear script that moves forward without looping or restating earlier points.
 - Write ONLY the spoken script that a narrator would say. No director’s directions, stage directions, production notes, or bracketed text.
 - Do not include any self-introduction unless the user specifically requests it.
+- Match the requested target length as closely as possible.
 
 Return only the final spoken script text."""
     response = openai_client.chat.completions.create(
@@ -354,7 +355,6 @@ if st.session_state.get("generated_script"):
             try:
                 OpenAI = get_openai()
                 client = OpenAI(api_key=openai_key)
-                # Use the current content of the editable text area
                 script_to_speak = st.session_state.get("editable_script", st.session_state.generated_script)
                 audio = generate_tts(script_to_speak, client, voice, tts_model, voice_style, narrator_name, channel_name, include_start_intro, include_end_intro)
                 st.session_state.voiceover_audio = audio
@@ -373,4 +373,5 @@ if st.session_state.get("generated_script"):
         )
 
 st.markdown("---")
-st.caption("You can edit the generated script and immediately generate a new voiceover from your changes.")
+st.caption("Target Length now includes a 30-60 second option. You can edit the script and generate a new voiceover from your changes.")
+Replace your current `app.py` with this version.
