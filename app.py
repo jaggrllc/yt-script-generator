@@ -4,7 +4,7 @@ import io
 st.set_page_config(page_title="YouTube Script Generator", page_icon="🎬", layout="wide")
 
 st.title("🎬 YouTube Video Script Generator + Voiceover")
-st.caption("Sequence of events • Neutral language • Avoids disturbing words")
+st.caption("Editable script • Generate voiceover from edits • Neutral language")
 
 # ── Sidebar ────────────────────────────────────────────────────────
 with st.sidebar:
@@ -17,7 +17,7 @@ with st.sidebar:
     temperature = st.slider("Creativity", 0.0, 1.0, 0.5)
     st.divider()
     if st.button("🗑️ Clear Video Script Content from Session (Privacy)", type="secondary", use_container_width=True):
-        keys_to_clear = ["generated_script", "voiceover_audio", "fact_check", "research"]
+        keys_to_clear = ["generated_script", "voiceover_audio", "fact_check", "research", "editable_script"]
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
@@ -266,13 +266,19 @@ if generate_btn:
                 fact_check = proofread_script(generated, research, client)
                 
                 st.session_state.generated_script = generated
+                st.session_state.editable_script = generated
                 st.session_state.fact_check = fact_check
                 st.session_state.research = research
                 st.session_state.voiceover_audio = None
                 st.success("Script generated and checked!")
                 
-                st.subheader("Generated Script")
-                st.text_area("Script", value=generated, height=400, key="script_display")
+                st.subheader("Generated Script (editable)")
+                st.text_area(
+                    "Edit the script below, then generate the voiceover from your version:",
+                    value=generated,
+                    height=400,
+                    key="editable_script"
+                )
                 
                 with st.expander("🔍 Fact-Check Notes", expanded=True):
                     st.markdown(fact_check)
@@ -281,9 +287,15 @@ if generate_btn:
             except Exception as e:
                 st.error(str(e))
 
+# Show editable script if it exists (persistent)
 if st.session_state.get("generated_script") and not generate_btn:
-    st.subheader("Generated Script")
-    st.text_area("Script", value=st.session_state.generated_script, height=400, key="script_display_persistent")
+    st.subheader("Generated Script (editable)")
+    st.text_area(
+        "Edit the script below, then generate the voiceover from your version:",
+        value=st.session_state.get("editable_script", st.session_state.generated_script),
+        height=400,
+        key="editable_script"
+    )
     if "fact_check" in st.session_state:
         with st.expander("🔍 Fact-Check Notes", expanded=False):
             st.markdown(st.session_state.fact_check)
@@ -338,13 +350,15 @@ if st.session_state.get("generated_script"):
     
     st.markdown("#### Full Voiceover")
     if st.button("🔊 Generate Full Voiceover MP3", type="primary", use_container_width=True):
-        with st.spinner("Creating and processing voiceover..."):
+        with st.spinner("Creating and processing voiceover from the edited script..."):
             try:
                 OpenAI = get_openai()
                 client = OpenAI(api_key=openai_key)
-                audio = generate_tts(st.session_state.generated_script, client, voice, tts_model, voice_style, narrator_name, channel_name, include_start_intro, include_end_intro)
+                # Use the current content of the editable text area
+                script_to_speak = st.session_state.get("editable_script", st.session_state.generated_script)
+                audio = generate_tts(script_to_speak, client, voice, tts_model, voice_style, narrator_name, channel_name, include_start_intro, include_end_intro)
                 st.session_state.voiceover_audio = audio
-                st.success("Voiceover generated, processed, and normalized!")
+                st.success("Voiceover generated from your edited script!")
                 st.audio(audio, format="audio/mp3")
             except Exception as e:
                 st.error(str(e))
@@ -359,4 +373,4 @@ if st.session_state.get("generated_script"):
         )
 
 st.markdown("---")
-st.caption("Scripts now avoid disturbing words (kill, died, death, etc.) and use neutral journalistic alternatives.")
+st.caption("You can edit the generated script and immediately generate a new voiceover from your changes.")
