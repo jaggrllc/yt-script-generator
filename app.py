@@ -374,4 +374,3 @@ if st.session_state.get("generated_script"):
 
 st.markdown("---")
 st.caption("Target Length now includes a 30-60 second option. You can edit the script and generate a new voiceover from your changes.")
-Replace your current `app.py` with this version.
